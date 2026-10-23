@@ -1,43 +1,49 @@
-# Sentinel — Secure Document Sharing Platform
+# Sentinel – Secure Document Sharing
 
-Sentinel is a security-focused document sharing platform built using React, Vite, TypeScript, Node.js, Express, PostgreSQL, and Prisma. It helps users securely upload, manage, share, and access documents based on their permissions.
+Sentinel is a web application that allows users to upload, manage, download, and securely share documents. It provides user authentication, document management, and access controls through a simple and professional interface.
+
+## Live Application
+
+- **Frontend:** https://sentinel-frontend-s3wx.onrender.com
+- **Backend API:** https://sentinel-backend-g1wa.onrender.com
+- **Health Check:** https://sentinel-backend-g1wa.onrender.com/api/health
 
 ## Features
 
-- Session-based authentication with Argon2id password hashing
-- Role-based access for Admin, Manager, and Employee
-- Server-side authorization for document operations
-- Private document storage
-- Secure document uploads with filename validation
-- Document sharing and access revocation
-- Audit logs for sensitive actions and denied access
-- Rate limiting and security headers
-- Automated authorization and security tests
-- Responsive dashboard
+- **User Authentication:** Log in and access protected application features.
+- **Dashboard:** View document information and access application sections.
+- **Document Management:** Upload, view, and download documents.
+- **Document Sharing:** Share documents with other users.
+- **Access Permissions:** Manage sharing permissions for documents.
+- **Shared Access Management:** View shared documents and revoke access when needed.
+- **Profile Management:** View user profile information.
+- **Password Management:** Change the account password.
+- **Security:** Protected API routes, HTTP security headers, and request rate limiting.
+- **Responsive Interface:** Clean layout with navigation and readable text.
 
-## Technology Stack
+## Technologies Used
 
-**Frontend**
+### Frontend
 - React
 - TypeScript
-- Vite
 - CSS
+- Vite
 
-**Backend**
+### Backend
 - Node.js
-- Express
+- Express.js
 - TypeScript
 - Prisma ORM
-- PostgreSQL
+- Database configured for the project
+- Cookie-based authentication
+- Helmet
+- CORS
+- Express Rate Limit
+- Multer for file uploads
 
-## Prerequisites
-
-Install the following before running the project:
-
-- Node.js 24 LTS
-- npm
-- PostgreSQL 15 or later
-- Trae or another code editor
+### Deployment
+- GitHub for source code management
+- Render for frontend and backend hosting
 
 ## Project Structure
 
@@ -45,167 +51,137 @@ Install the following before running the project:
 sentinel-full/
 ├── client/
 │   ├── src/
-│   ├── index.html
+│   │   ├── main.tsx
+│   │   └── style.css
 │   ├── package.json
 │   └── vite.config.ts
 ├── server/
-│   ├── prisma/
-│   │   ├── migrations/
-│   │   └── schema.prisma
 │   ├── src/
-│   ├── tests/
-│   └── package.json
-├── docs/
-├── storage/
-├── .env.example
-├── package.json
-├── README.md
-├── PROMPTS.md
-└── THREATS.md
+│   │   ├── app.ts
+│   │   └── ...
+│   ├── prisma/
+│   ├── package.json
+│   └── ...
+└── README.md
 ```
 
-## Installation and Setup
+The exact files and folders may vary depending on the current project version.
 
-### Step 1: Open the project
+## Getting Started
 
-Open the `sentinel-full` folder in Trae.
+### Prerequisites
 
-If your terminal is currently in the `sentinel-complete` folder, run:
+Install the following software:
 
-```powershell
-cd sentinel-full
+- Node.js and npm
+- A supported database configured for the backend
+- A code editor such as Visual Studio Code
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/23jr1a0522/sentinel-secure-document-sharing.git
+cd sentinel-secure-document-sharing/sentinel-full
 ```
 
-### Step 2: Set up PostgreSQL
+If the repository contains the project files directly, enter the folder containing `client`, `server`, and `README.md` instead.
 
-Make sure PostgreSQL is installed and running.
+### 2. Set Up the Backend
 
-Create a database named `sentinel` using pgAdmin or your preferred PostgreSQL tool.
-
-### Step 3: Configure environment variables
-
-Open the `server` folder.
-
-Create a file named `.env` inside `server/`. You can copy `server/.env.example` and rename the copy to `.env`.
-
-Configure the following variables using your own local PostgreSQL credentials:
-
-```env
-DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/sentinel?schema=public"
-SESSION_SECRET="REPLACE_WITH_A_LONG_RANDOM_SECRET"
-```
-
-Replace `YOUR_PASSWORD` with your PostgreSQL password. Use a strong, randomly generated session secret.
-
-Keep `.env` private. Never commit it to GitHub.
-
-### Step 4: Install and prepare the backend
-
-Open a Trae terminal and run:
-
-```powershell
+```bash
 cd server
 npm install
-npx prisma generate
-npx prisma migrate dev
-npm run seed
 ```
 
-These commands install backend dependencies, generate the Prisma client, apply database migrations, and create the development demo accounts.
+Configure the required environment variables and database connection using the project's existing environment configuration and setup instructions.
 
-Keep this terminal open.
+Apply database migrations if required by the project:
 
-### Step 5: Start the backend
+```bash
+npx prisma migrate deploy
+```
 
-In the same terminal, run:
+Start the backend using the available development script in `server/package.json`. For example:
 
-```powershell
+```bash
 npm run dev
 ```
 
-The backend is expected to run at:
+### 3. Set Up the Frontend
 
-**http://localhost:4000**
+Open another terminal:
 
-Keep the backend terminal running while using the application.
-
-### Step 6: Install and start the frontend
-
-Open a **second terminal** in Trae. Run:
-
-```powershell
-cd "C:\Users\Gurramsreenivasaredy\Downloads\sentinel-complete\sentinel-full\client"
+```bash
+cd client
 npm install
 npm run dev
 ```
 
-The frontend should be available at:
+Open the local URL printed by Vite in your browser.
 
-**http://localhost:5173**
+Make sure the frontend API configuration points to your local backend during local development, or to the deployed backend when using the live application.
 
-Open this address in your browser to use Sentinel.
+### 4. Build the Frontend
 
-## Running the Project After Initial Setup
+From the `client` directory, run:
 
-Whenever you want to run Sentinel again:
-
-**Terminal 1 — Backend**
-
-```powershell
-cd "C:\Users\Gurramsreenivasaredy\Downloads\sentinel-complete\sentinel-full\server"
-npm run dev
+```bash
+npm run build
 ```
 
-**Terminal 2 — Frontend**
+A successful build confirms that the frontend compiles without build errors.
 
-```powershell
-cd "C:\Users\Gurramsreenivasaredy\Downloads\sentinel-complete\sentinel-full\client"
-npm run dev
+## API Information
+
+The backend API is available at:
+
+```text
+https://sentinel-backend-g1wa.onrender.com/api
 ```
 
-Start PostgreSQL before starting the backend. You normally do not need to repeat installation, Prisma generation, migrations, or seeding every time.
+The application uses API routes for authentication, document operations, and sharing permissions.
 
-## Development Demo Accounts
+Health-check endpoint:
 
-The seed script creates the following development accounts, as configured in the project:
-
-| Role | Email | Password |
-|---|---|---|
-| Admin | admin@sentinel.local | Admin123!DevOnly |
-| Manager | manager@sentinel.local | Manager123!DevOnly |
-| Employee | employee1@sentinel.local | Employee123!DevOnly |
-| Employee | employee2@sentinel.local | Employee123!DevOnly |
-
-These credentials are for local development only. Do not use them for a public production deployment.
-
-## Running Tests
-
-To run the backend tests:
-
-```powershell
-cd server
-npm test
+```text
+GET /api/health
 ```
 
-Run this from the `sentinel-full` directory. Ensure the required dependencies are installed first.
+Authentication and document routes require the appropriate authentication and permissions.
 
 ## Security Notes
 
-- All document operations must be authorized by the backend.
-- Private documents must not be exposed through the frontend's public directory.
-- Document downloads must require an authorization check.
-- Environment files and credentials must remain private.
-- Review `THREATS.md` before deploying the application.
+- Do not upload `.env` files, passwords, session cookies, API keys, or other secrets to GitHub.
+- Store production credentials in the hosting platform's environment variables.
+- Keep authentication and authorization checks enabled on protected backend routes.
+- Validate file uploads and verify document permissions on the server.
+- Use HTTPS for deployed application traffic.
+- Never share private documents or credentials in public issues or screenshots.
 
-## Production Deployment
+## Deployment
 
-Before deploying Sentinel publicly:
+The application is deployed using Render:
 
-- Use a managed PostgreSQL database.
-- Configure private file or object storage.
-- Enable HTTPS and secure session cookies.
-- Generate strong production secrets.
-- Rotate or remove development demo credentials.
-- Configure backups, monitoring, and appropriate access controls.
+- The **frontend service** hosts the React application.
+- The **backend service** provides the Express API.
+- The backend must have its required environment variables, database connection, and migration configuration.
+- The frontend must use the correct deployed backend API URL.
+- Cross-origin requests and authentication cookies must be configured correctly for the deployed frontend and backend.
 
-Sentinel must be tested and securely configured before production use.
+## Future Improvements
+
+- Add stronger automated security and permission tests.
+- Improve error messages and session handling.
+- Add document activity history.
+- Improve document search and filtering.
+- Add automated deployment checks.
+
+## Author
+
+**G. Pranavi Sri**
+
+GitHub: https://github.com/23jr1a0522
+
+## License
+
+Add an appropriate license before distributing or reusing this project publicly.
