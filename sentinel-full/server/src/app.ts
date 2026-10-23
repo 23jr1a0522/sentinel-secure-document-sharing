@@ -28,8 +28,11 @@ import {
 
 import argon2 from 'argon2';
 import { z } from 'zod';
+import aiRouter from './ai.js';
 
 const app = express();
+
+app.use('/api/ai', aiRouter);
 
 // Render runs the application behind a proxy.
 app.set('trust proxy', 1);
@@ -178,15 +181,13 @@ app.post(
       }
     });
 
-    
-res.cookie('sentinel_session', sid, {
-  httpOnly: true,
-  sameSite: 'none',
-  secure: true,
-  maxAge: 8 * 60 * 60 * 1000,
-  path: '/'
-});
-
+    res.cookie('sentinel_session', sid, {
+      httpOnly: true,
+      sameSite: 'none',
+      secure: true,
+      maxAge: 8 * 60 * 60 * 1000,
+      path: '/'
+    });
 
     await audit('LOGIN', {
       userId: user.id,
@@ -222,14 +223,12 @@ app.post(
       });
     }
 
-    
-res.clearCookie('sentinel_session', {
-  httpOnly: true,
-  sameSite: 'none',
-  secure: true,
-  path: '/'
-});
-
+    res.clearCookie('sentinel_session', {
+      httpOnly: true,
+      sameSite: 'none',
+      secure: true,
+      path: '/'
+    });
 
     await audit('LOGOUT', {
       userId: req.user!.id,
@@ -333,12 +332,10 @@ app.post(
       });
     }
 
-    // Hash the new password before saving it.
     const passwordHash = await argon2.hash(
       p.data.newPassword
     );
 
-    // Save the new password and invalidate existing sessions.
     await prisma.$transaction([
       prisma.user.update({
         where: {
