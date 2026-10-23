@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
-const API = 'http://localhost:5000/api';
+const API = 'https://sentinel-backend-g1wa.onrender.com/api';
 
 type User = {
   id: string;
