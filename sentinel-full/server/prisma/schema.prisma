@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+enum SharePermission {
+  VIEW
+  DOWNLOAD
+}
+
+enum AuditAction {
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+  UPLOAD
+  DOWNLOAD
+  VIEW
+  SHARE
+  REVOKE
+  DELETE
+  ACCESS_DENIED
+  ROLE_CHANGE
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  role         Role           @default(EMPLOYEE)
+  department   String?
+  createdAt    DateTime       @default(now())
+  sessions     Session[]
+  documents    Document[]
+  shares       DocumentShare[] @relation("RecipientShares")
+  auditLogs    AuditLog[]
+}
+model Session {
+  id        String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+model Document {
+  id          String          @id @default(cuid())
+  ownerId     String
+  title       String
+  category    String
+  originalName String
+  storageName String          @unique
+  mimeType    String
+  size        Int
+  createdAt   DateTime        @default(now())
+  owner       User            @relation(fields:[ownerId], references:[id], onDelete:Restrict)
+  shares      DocumentShare[]
+  auditLogs   AuditLog[]
+  @@index([ownerId, createdAt])
+}
+model DocumentShare {
+  id         String         @id @default(cuid())
+  documentId String
+  recipientId String
+  permission SharePermission
+  createdAt  DateTime       @default(now())
+  revokedAt  DateTime?
+  document   Document       @relation(fields:[documentId], references:[id], onDelete:Cascade)
+  recipient  User           @relation("RecipientShares", fields:[recipientId], references:[id], onDelete:Cascade)
+  @@unique([documentId, recipientId])
+  @@index([recipientId, revokedAt])
+}
+model AuditLog {
+  id         String      @id @default(cuid())
+  userId     String?
+  documentId String?
+  action     AuditAction
+  success    Boolean
+  ip         String?
+  details    String?
+  createdAt  DateTime    @default(now())
+  user       User?       @relation(fields:[userId], references:[id], onDelete:SetNull)
+  document   Document?   @relation(fields:[documentId], references:[id], onDelete:SetNull)
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
