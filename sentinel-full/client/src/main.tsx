@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
@@ -56,6 +55,11 @@ function App() {
   const [shareDoc, setShareDoc] = useState<Doc | null>(null);
   const [recipientEmail, setRecipientEmail] = useState('');
   const [permission, setPermission] = useState<'VIEW' | 'DOWNLOAD'>('VIEW');
+
+  const [aiDoc, setAiDoc] = useState<Doc | null>(null);
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiAnswer, setAiAnswer] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -310,6 +314,36 @@ function App() {
     }
   }
 
+  async function askDocumentAI() {
+    if (!aiDoc || !aiQuestion.trim() || aiLoading) return;
+
+    setError('');
+    setMessage('');
+    setAiAnswer('');
+    setAiLoading(true);
+
+    try {
+      const data = await api('/ai/ask', {
+        method: 'POST',
+        body: JSON.stringify({
+          documentId: aiDoc.id,
+          question: aiQuestion.trim(),
+        }),
+      });
+
+      setAiAnswer(data.answer || 'No answer was generated.');
+    } catch (e) {
+      setAiAnswer('');
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Unable to ask AI. Please try again.'
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   async function shareDocument() {
     if (!shareDoc) return;
 
@@ -369,119 +403,82 @@ function App() {
   }
 
   function formatDate(date: string) {
-    if (!date) return '-';
-
-    return new Date(date).toLocaleDateString('en-IN', {
+    return new Date(date).toLocaleDateString('en-GB', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
     });
   }
 
-  const ownedDocs = docs.filter(doc => doc.ownerId === user?.id);
-  const sharedDocs = docs.filter(doc => doc.ownerId !== user?.id);
-
-  const totalShares = ownedDocs.reduce(
-    (total, doc) => total + (doc.shares?.length || 0),
-    0
+  const filteredDocs = useMemo(
+    () =>
+      docs.filter(doc =>
+        doc.originalName.toLowerCase().includes(search.toLowerCase())
+      ),
+    [docs, search]
   );
 
-  const storageUsed = docs.reduce(
-    (total, doc) => total + Number(doc.size || 0),
-    0
+  const sharedDocs = useMemo(
+    () => docs.filter(doc => doc.ownerId !== user?.id),
+    [docs, user]
   );
 
-  const filteredDocs = useMemo(() => {
-    const value = search.toLowerCase().trim();
-
-    if (!value) return docs;
-
-    return docs.filter(doc =>
-      doc.originalName.toLowerCase().includes(value)
-    );
-  }, [docs, search]);
+  const ownedDocs = useMemo(
+    () => docs.filter(doc => doc.ownerId === user?.id),
+    [docs, user]
+  );
 
   if (!user) {
     return (
-      <div className="login-page">
-        <div className="login-orb orb-one" />
-        <div className="login-orb orb-two" />
-
-        <div className="login-shell">
+      <div className="login-screen">
+        <div className="login-card">
           <div className="login-brand">
-            <div className="shield-logo"><span>◆</span></div>
+            <div className="brand-symbol">◆</div>
             <div>
-              <strong>SENTINEL</strong>
-              <small>SECURE DOCUMENT VAULT</small>
+              <h1>SENTINEL</h1>
+              <span>SECURE VAULT</span>
             </div>
           </div>
 
-          <div className="login-card">
-            <div className="login-icon">🛡</div>
-
-            <div className="login-heading">
-              <span className="eyebrow">SECURE ACCESS</span>
-              <h1>Welcome back.</h1>
-              <p>Your documents. Your permissions. Your control.</p>
-            </div>
-
-            {message && (
-              <div className="notification success" role="status" aria-live="polite">
-                <span>✓</span>
-                {message}
-                <button type="button" onClick={() => setMessage('')}>×</button>
-              </div>
-            )}
-
-            <form onSubmit={login}>
-              <label>Email address</label>
-              <div className="input-wrap">
-                <span>✉</span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  autoComplete="username"
-                  required
-                />
-              </div>
-
-              <label>Password</label>
-              <div className="input-wrap">
-                <span>●</span>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  autoComplete="current-password"
-                  required
-                />
-              </div>
-
-              {error && (
-                <div className="login-error" role="alert">{error}</div>
-              )}
-
-              <button className="login-button" disabled={loading} type="submit">
-                <span>{loading ? 'Authenticating...' : 'Enter Secure Vault'}</span>
-                <span>→</span>
-              </button>
-            </form>
-
-            <div className="login-security">
-              <span>✓</span>
-              <div>
-                <strong>Protected session</strong>
-                <small>Server-side authentication enabled</small>
-              </div>
-            </div>
+          <div className="login-heading">
+            <span className="panel-eyebrow">SECURE DOCUMENT SHARING</span>
+            <h2>Welcome back</h2>
+            <p>Sign in to access your secure workspace.</p>
           </div>
+
+          {error && <div className="alert error-alert">{error}</div>}
+          {message && <div className="alert success-alert">{message}</div>}
+
+          <form onSubmit={login} className="login-form">
+            <label htmlFor="email">Email address</label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="Enter your email"
+              autoComplete="username"
+              required
+            />
+
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              required
+            />
+
+            <button className="login-button" type="submit" disabled={loading}>
+              {loading ? 'Signing in...' : 'Sign in securely'}
+            </button>
+          </form>
 
           <div className="login-footer">
-            <span>● SYSTEM OPERATIONAL</span>
-            <span>ENCRYPTED CONNECTION</span>
+            Your documents are protected by Sentinel security controls.
           </div>
         </div>
       </div>
@@ -491,91 +488,105 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="side-brand">
-          <div className="mini-shield">◆</div>
-          <div><strong>SENTINEL</strong><span>SECURE VAULT</span></div>
+        <div className="sidebar-brand">
+          <div className="brand-symbol">◆</div>
+          <div>
+            <h2>SENTINEL</h2>
+            <span>SECURE VAULT</span>
+          </div>
         </div>
 
-        <div className="side-section-title">WORKSPACE</div>
+        <span className="sidebar-label">WORKSPACE</span>
 
-        <nav>
-          {(['Overview', 'Documents', 'Shared Access', 'Security', 'Profile'] as Page[]).map(item => (
+        <nav className="sidebar-nav">
+          {([
+            ['Overview', '⌂'],
+            ['Documents', '▣'],
+            ['Shared Access', '♧'],
+            ['Security', '◇'],
+            ['Profile', '♙'],
+          ] as [Page, string][]).map(([label, icon]) => (
             <button
-              key={item}
-              className={`nav-item ${page === item ? 'active' : ''}`}
+              key={label}
+              className={`nav-item ${page === label ? 'active' : ''}`}
               onClick={() => {
+                setPage(label);
                 setError('');
                 setMessage('');
-                setPage(item);
               }}
             >
-              <span className="nav-icon">
-                {item === 'Overview' ? '⌂' :
-                  item === 'Documents' ? '▣' :
-                    item === 'Shared Access' ? '♧' :
-                      item === 'Security' ? '◈' : '♙'}
-              </span>
-              {item}
-              {item === 'Documents' && <span className="nav-count">{docs.length}</span>}
-              {item === 'Shared Access' && sharedDocs.length > 0 && (
-                <span className="nav-count">{sharedDocs.length}</span>
+              <span>{icon}</span>
+              {label}
+              {label === 'Documents' && (
+                <small className="nav-count">{docs.length}</small>
               )}
             </button>
           ))}
         </nav>
 
         <div className="sidebar-security">
-          <div className="security-ring"><span>98</span></div>
-          <div><strong>Security Score</strong><small>Excellent protection</small></div>
-          <div className="score-line"><span /></div>
+          <div className="security-circle">
+            <strong>98</strong>
+          </div>
+          <div>
+            <strong>Security Score</strong>
+            <span>Excellent protection</span>
+          </div>
+          <div className="security-progress"><span /></div>
         </div>
 
-        <div className="side-bottom">
-          <div className="privacy-box">
-            <span>🛡</span>
-            <div><strong>Private Storage</strong><small>Your files are protected</small></div>
+        <div className="sidebar-storage">
+          <span>♧</span>
+          <div>
+            <strong>Private Storage</strong>
+            <small>Your files stay protected</small>
           </div>
         </div>
       </aside>
 
-      <main className="main-content">
+      <main className="main-area">
         <header className="topbar">
           <div className="breadcrumb">
-            <span>Workspace</span><b>/</b><strong>{page}</strong>
+            <span>Workspace</span>
+            <b>/</b>
+            <strong>{page}</strong>
           </div>
 
-          <div className="top-actions">
-            <div className="system-status"><span className="pulse" />All systems secure</div>
-            <div className="user-menu">
-              <div className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</div>
-              <div><strong>{user.name}</strong><small>{user.role}</small></div>
-              <button
-                className="logout-button"
-                onClick={() => {
-                  setError('');
-                  setMessage('');
-                  setPage('Profile');
-                }}
-              >
-                Profile
-              </button>
-              <button className="logout-button" onClick={logout}>Logout</button>
+          <div className="topbar-right">
+            <div className="system-status">
+              <span />
+              All systems secure
             </div>
+            <div className="topbar-user">
+              <div className="user-avatar">
+                {(user.name || user.email).charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <strong>{user.name}</strong>
+                <small>{user.role}</small>
+              </div>
+            </div>
+            <button className="topbar-button" onClick={() => setPage('Profile')}>
+              Profile
+            </button>
+            <button className="topbar-button logout-button" onClick={logout}>
+              Logout
+            </button>
           </div>
         </header>
 
-        <div className="content">
+        <div className="page-content">
           {message && (
-            <div className="notification success" role="status" aria-live="polite">
+            <div className="alert success-alert">
               <span>✓</span>{message}
-              <button type="button" onClick={() => setMessage('')}>×</button>
+              <button onClick={() => setMessage('')}>×</button>
             </div>
           )}
 
           {error && (
-            <div className="notification danger" role="alert">
+            <div className="alert error-alert">
               <span>!</span>{error}
-              <button type="button" onClick={() => setError('')}>×</button>
+              <button onClick={() => setError('')}>×</button>
             </div>
           )}
 
@@ -585,30 +596,39 @@ function App() {
               docs={docs}
               ownedDocs={ownedDocs}
               sharedDocs={sharedDocs}
-              totalShares={totalShares}
-              storageUsed={storageUsed}
               formatBytes={formatBytes}
-              setPage={setPage}
-              uploadFile={uploadFile}
-              viewDocument={viewDocument}
-              downloadDocument={downloadDocument}
               formatDate={formatDate}
+              setPage={setPage}
             />
           )}
 
           {page === 'Documents' && (
             <DocumentsPage
               docs={filteredDocs}
+              user={user}
               search={search}
               setSearch={setSearch}
               uploadFile={uploadFile}
-              user={user}
               viewDocument={viewDocument}
               downloadDocument={downloadDocument}
+              shareDoc={shareDoc}
               setShareDoc={setShareDoc}
+              recipientEmail={recipientEmail}
+              setRecipientEmail={setRecipientEmail}
+              permission={permission}
+              setPermission={setPermission}
+              shareDocument={shareDocument}
+              revokeShare={revokeShare}
               formatBytes={formatBytes}
               formatDate={formatDate}
-              revokeShare={revokeShare}
+              aiDoc={aiDoc}
+              setAiDoc={setAiDoc}
+              aiQuestion={aiQuestion}
+              setAiQuestion={setAiQuestion}
+              aiAnswer={aiAnswer}
+              setAiAnswer={setAiAnswer}
+              aiLoading={aiLoading}
+              askDocumentAI={askDocumentAI}
             />
           )}
 
@@ -639,179 +659,7 @@ function App() {
           )}
         </div>
       </main>
-
-      {shareDoc && (
-        <div className="modal-backdrop" onClick={() => setShareDoc(null)}>
-          <div className="share-modal" onClick={e => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShareDoc(null)}>×</button>
-            <div className="modal-icon">♧</div>
-            <span className="panel-eyebrow">SECURE SHARING</span>
-            <h2>Share document</h2>
-            <p>Give another Sentinel user controlled access to:</p>
-            <div className="modal-file"><span>▤</span><strong>{shareDoc.originalName}</strong></div>
-
-            <label>Recipient email</label>
-            <div className="modal-input">
-              <span>✉</span>
-              <input
-                type="email"
-                value={recipientEmail}
-                onChange={e => setRecipientEmail(e.target.value)}
-                placeholder="employee@sentinel.local"
-              />
-            </div>
-
-            <label>Permission level</label>
-            <div className="permission-selector">
-              <button
-                type="button"
-                className={permission === 'VIEW' ? 'selected' : ''}
-                onClick={() => setPermission('VIEW')}
-              >
-                <strong>VIEW</strong><small>Can open the document</small>
-              </button>
-              <button
-                type="button"
-                className={permission === 'DOWNLOAD' ? 'selected' : ''}
-                onClick={() => setPermission('DOWNLOAD')}
-              >
-                <strong>DOWNLOAD</strong><small>Can view and download</small>
-              </button>
-            </div>
-
-            <button className="modal-share-button" onClick={shareDocument}>
-              <span>Grant Secure Access</span><span>→</span>
-            </button>
-            <div className="modal-warning">
-              <span>🛡</span>
-              <span>Access can be revoked by the document owner at any time.</span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
-  );
-}
-
-function ProfilePage({
-  user,
-  currentPassword,
-  setCurrentPassword,
-  newPassword,
-  setNewPassword,
-  confirmPassword,
-  setConfirmPassword,
-  changingPassword,
-  changePassword,
-}: any) {
-  const inputStyle: React.CSSProperties = {
-    display: 'block',
-    width: '100%',
-    boxSizing: 'border-box',
-    padding: '12px 14px',
-    marginTop: 8,
-    border: '1px solid #d5dce7',
-    borderRadius: 8,
-    background: '#fff',
-    color: '#172033',
-    fontSize: 14,
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    marginBottom: 16,
-    fontWeight: 600,
-    color: '#263449',
-  };
-
-  return (
-    <>
-      <div className="page-title">
-        <div>
-          <span className="panel-eyebrow">ACCOUNT SETTINGS</span>
-          <h1>Profile Settings</h1>
-          <p>Manage your account details and password.</p>
-        </div>
-      </div>
-
-      <div className="quick-card">
-        <span className="panel-eyebrow">PROFILE INFORMATION</span>
-        <div style={{ marginTop: 20 }}>
-          <p><strong>Name:</strong> {user.name}</p>
-          <p><strong>Email:</strong> {user.email}</p>
-          <p><strong>Role:</strong> {user.role}</p>
-          {user.department && <p><strong>Department:</strong> {user.department}</p>}
-        </div>
-      </div>
-
-      <div className="quick-card" style={{ marginTop: 24 }}>
-        <span className="panel-eyebrow">ACCOUNT SECURITY</span>
-        <h2 style={{ marginTop: 10 }}>Change Password</h2>
-        <p>Enter your current password and choose a new password. You will need to log in again after changing it.</p>
-
-        <form
-          onSubmit={changePassword}
-          noValidate
-          style={{ display: 'grid', gap: 4, maxWidth: 480, marginTop: 24 }}
-        >
-          <label style={labelStyle}>
-            Current Password
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={e => setCurrentPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-              maxLength={128}
-              style={inputStyle}
-            />
-          </label>
-
-          <label style={labelStyle}>
-            New Password
-            <input
-              type="password"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              autoComplete="new-password"
-              minLength={6}
-              maxLength={128}
-              required
-              style={inputStyle}
-            />
-            <small style={{ display: 'block', marginTop: 6, color: '#64748b' }}>
-              Use at least 6 characters.
-            </small>
-          </label>
-
-          <label style={labelStyle}>
-            Confirm New Password
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              autoComplete="new-password"
-              maxLength={128}
-              required
-              style={inputStyle}
-            />
-          </label>
-
-          <button
-            type="submit"
-            className="login-button"
-            disabled={changingPassword}
-            style={{
-              marginTop: 8,
-              cursor: changingPassword ? 'not-allowed' : 'pointer',
-              opacity: changingPassword ? 0.7 : 1,
-            }}
-          >
-            {changingPassword ? 'Updating Password...' : 'Update Password'}
-          </button>
-        </form>
-      </div>
-    </>
   );
 }
 
@@ -820,185 +668,285 @@ function OverviewPage({
   docs,
   ownedDocs,
   sharedDocs,
-  totalShares,
-  storageUsed,
   formatBytes,
-  setPage,
-  uploadFile,
-  viewDocument,
-  downloadDocument,
   formatDate,
+  setPage,
 }: any) {
+  const totalStorage = docs.reduce((sum: number, doc: Doc) => sum + doc.size, 0);
+
   return (
     <>
-      <section className="hero">
+      <div className="welcome-banner">
+        <span>✓</span>
         <div>
-          <div className="hero-label"><span />SECURE WORKSPACE</div>
-          <h1>Good to see you,<br /><span>{user.name.split(' ')[0]}.</span></h1>
-          <p>Manage your sensitive documents with confidence. Every access request is verified by Sentinel.</p>
+          <strong>Welcome to Sentinel</strong>
+          <p>Your secure document workspace is ready.</p>
         </div>
-        <div className="hero-shield">
-          <div className="shield-glow" />
-          <div className="large-shield">◆</div>
-          <div className="shield-check">✓</div>
+      </div>
+
+      <div className="page-title">
+        <div>
+          <span className="panel-eyebrow">WORKSPACE OVERVIEW</span>
+          <h1>Good to see you, {user.name}</h1>
+          <p>Manage your documents and keep your information protected.</p>
         </div>
-      </section>
+        <div className="security-status-badge"><span />SYSTEM SECURE</div>
+      </div>
 
-      <section className="stats-grid">
-        <StatCard icon="▣" title="Total Documents" value={docs.length} subtitle="Protected files" />
-        <StatCard icon="♧" title="Shared Access" value={totalShares} subtitle="Active permissions" />
-        <StatCard icon="◉" title="Storage Used" value={formatBytes(storageUsed)} subtitle="Private storage" />
-        <StatCard icon="✓" title="Protection" value="98%" subtitle="Security score" />
-      </section>
+      <div className="stats-grid">
+        <StatCard icon="▤" title="Total Documents" value={docs.length} subtitle="Available to you" />
+        <StatCard icon="▣" title="Owned Documents" value={ownedDocs.length} subtitle="Managed by you" />
+        <StatCard icon="♧" title="Shared Documents" value={sharedDocs.length} subtitle="Shared with you" />
+        <StatCard icon="▥" title="Storage Used" value={formatBytes(totalStorage)} subtitle="Across your documents" />
+      </div>
 
-      <section className="overview-grid">
-        <div className="quick-card">
-          <div className="quick-heading">
-            <div><span className="panel-eyebrow">QUICK ACTIONS</span><h2>Manage your vault</h2></div>
-          </div>
-          <div className="quick-actions">
-            <label className="quick-action blue">
-              <input type="file" onChange={uploadFile} />
-              <span>＋</span><strong>Upload Document</strong><small>Secure a new file</small>
-            </label>
-            <button className="quick-action purple" onClick={() => setPage('Documents')}>
-              <span>▣</span><strong>View Documents</strong><small>Manage your files</small>
-            </button>
-            <button className="quick-action green" onClick={() => setPage('Shared Access')}>
-              <span>♧</span><strong>Shared Access</strong><small>Review permissions</small>
-            </button>
-            <button className="quick-action orange" onClick={() => setPage('Security')}>
-              <span>◈</span><strong>Security Center</strong><small>Check protection</small>
-            </button>
-          </div>
-        </div>
-
-        <div className="recent-card">
-          <div className="quick-heading">
-            <div><span className="panel-eyebrow">RECENT ACTIVITY</span><h2>Recent Documents</h2></div>
+      <div className="overview-grid">
+        <div className="panel overview-documents">
+          <div className="panel-heading">
+            <div><span className="panel-eyebrow">YOUR WORKSPACE</span><h2>Recent Documents</h2></div>
             <button className="text-button" onClick={() => setPage('Documents')}>View all →</button>
           </div>
+
           {docs.length === 0 ? (
-            <div className="small-empty">No documents yet.</div>
+            <div className="empty-state"><div>▤</div><h3>No documents yet</h3><p>Upload a document to get started.</p></div>
           ) : docs.slice(0, 4).map((doc: Doc) => (
             <div className="recent-document" key={doc.id}>
-              <div className="recent-icon">▤</div>
-              <div><strong>{doc.originalName}</strong><small>{formatDate(doc.createdAt)}</small></div>
-              <button onClick={() => viewDocument(doc)}>View</button>
+              <div className="file-icon">▤</div>
+              <div><strong>{doc.originalName}</strong><small>{formatBytes(doc.size)} · {formatDate(doc.createdAt)}</small></div>
+              <span className="recent-status">SECURE</span>
             </div>
           ))}
         </div>
-      </section>
 
-      <section className="overview-security">
-        <div className="overview-security-icon">🛡</div>
-        <div>
-          <span className="panel-eyebrow">SENTINEL PROTECTION</span>
-          <h2>Your workspace is protected.</h2>
-          <p>Authentication, authorization, private storage and document permissions are enforced by the server.</p>
+        <div className="panel quick-actions">
+          <span className="panel-eyebrow">QUICK ACTIONS</span>
+          <h2>Manage your files</h2>
+          <p>Use these shortcuts to manage your secure workspace.</p>
+          <button onClick={() => setPage('Documents')}>▤ <span>Manage documents</span> →</button>
+          <button onClick={() => setPage('Shared Access')}>♧ <span>Shared access</span> →</button>
+          <button onClick={() => setPage('Security')}>◇ <span>Security center</span> →</button>
         </div>
-        <button onClick={() => setPage('Security')}>Security Center →</button>
-      </section>
+      </div>
     </>
   );
 }
 
 function DocumentsPage({
   docs,
+  user,
   search,
   setSearch,
   uploadFile,
-  user,
   viewDocument,
   downloadDocument,
   setShareDoc,
+  recipientEmail,
+  setRecipientEmail,
+  permission,
+  setPermission,
+  shareDocument,
+  revokeShare,
   formatBytes,
   formatDate,
-  revokeShare,
+  aiDoc,
+  setAiDoc,
+  aiQuestion,
+  setAiQuestion,
+  aiAnswer,
+  setAiAnswer,
+  aiLoading,
+  askDocumentAI,
 }: any) {
   return (
     <>
+      <div className="welcome-banner">
+        <span>✓</span>
+        <div>
+          <strong>Welcome to Sentinel</strong>
+          <p>Your documents are protected.</p>
+        </div>
+      </div>
+
       <div className="page-title">
         <div>
           <span className="panel-eyebrow">DOCUMENT MANAGEMENT</span>
           <h1>Documents</h1>
           <p>Securely manage all documents available to your account.</p>
         </div>
+      </div>
+
+      <div className="upload-bar">
         <label className="upload-button">
-          <input type="file" onChange={uploadFile} />＋ Secure Upload
+          + Secure Upload
+          <input
+            type="file"
+            accept=".pdf,.txt,.docx"
+            onChange={uploadFile}
+            hidden
+          />
         </label>
       </div>
 
-      <div className="documents-full">
-        <div className="document-toolbar">
-          <div className="search-box">
-            <span>⌕</span>
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search documents..."
-            />
+      <div className="document-toolbar">
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search documents..."
+          aria-label="Search documents"
+        />
+        <span><i /> {docs.length} documents</span>
+      </div>
+
+      <div className="document-list">
+        {docs.length === 0 ? (
+          <div className="empty-state">
+            <div>▣</div><h3>No documents found</h3><p>Upload a document to your secure vault.</p>
           </div>
-          <div className="protected-label"><span className="green-dot" />{docs.length} documents</div>
-        </div>
+        ) : docs.map((doc: Doc) => {
+          const owner = doc.ownerId === user.id;
 
-        <div className="document-list">
-          {docs.length === 0 ? (
-            <div className="empty-state">
-              <div>▣</div><h3>No documents found</h3><p>Upload a document to your secure vault.</p>
-            </div>
-          ) : docs.map((doc: Doc) => {
-            const owner = doc.ownerId === user.id;
-
-            return (
-              <article className="document-card" key={doc.id}>
-                <div className="file-icon">▤<small>FILE</small></div>
-                <div className="file-info">
-                  <h3>{doc.originalName}</h3>
-                  <div className="file-meta">
-                    <span>{formatBytes(doc.size)}</span><i /><span>{formatDate(doc.createdAt)}</span>
-                  </div>
-                  <div className={owner ? 'owner-badge' : 'owner-badge shared'}>
-                    ● {owner ? 'Owned by you' : 'Shared with you'}
-                  </div>
+          return (
+            <article className="document-card" key={doc.id}>
+              <div className="file-icon">▤<small>FILE</small></div>
+              <div className="file-info">
+                <h3>{doc.originalName}</h3>
+                <div className="file-meta">
+                  <span>{formatBytes(doc.size)}</span><i /><span>{formatDate(doc.createdAt)}</span>
                 </div>
-                <div className="permission-area">
-                  <span className="permission">{owner ? 'OWNER' : 'SHARED'}</span>
+                <div className={owner ? 'owner-badge' : 'owner-badge shared'}>
+                  ● {owner ? 'Owned by you' : 'Shared with you'}
                 </div>
-                <div className="document-actions">
-                  <button className="action-button secondary" onClick={() => viewDocument(doc)}>View</button>
-                  <button className="action-button primary" onClick={() => downloadDocument(doc)}>↓</button>
-                  {owner && (
-  <button
-    className="action-button share"
-    onClick={() => setShareDoc(doc)}
-    type="button"
-  >
-    Share
-  </button>
-)}
-                </div>
-
-                {owner && doc.shares && doc.shares.length > 0 && (
-                  <div className="share-strip">
-                    {doc.shares.map(share => (
-                      <div className="active-share" key={share.id}>
-                        <div className="share-avatar">
-                          {(share.recipient.name || share.recipient.email).charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <strong>{share.recipient.name || share.recipient.email}</strong>
-                          <small>{share.permission} permission</small>
-                        </div>
-                        <button onClick={() => revokeShare(doc, share.id)}>Revoke</button>
-                      </div>
-                    ))}
-                  </div>
+              </div>
+              <div className="permission-area">
+                <span className="permission">{owner ? 'OWNER' : 'SHARED'}</span>
+              </div>
+              <div className="document-actions">
+                <button className="action-button secondary" onClick={() => viewDocument(doc)}>View</button>
+                <button className="action-button primary" onClick={() => downloadDocument(doc)}>↓</button>
+                {owner && (
+                  <button className="action-button share" onClick={() => setShareDoc(doc)} type="button">Share</button>
                 )}
-              </article>
-            );
-          })}
-        </div>
+                <button
+                  className="action-button"
+                  style={{ background: '#ede9fe', color: '#6d28d9' }}
+                  onClick={() => {
+                    setAiDoc(aiDoc?.id === doc.id ? null : doc);
+                    setAiQuestion('');
+                    setAiAnswer('');
+                  }}
+                  type="button"
+                >
+                  ✦ Ask AI
+                </button>
+              </div>
+
+              {aiDoc?.id === doc.id && (
+                <div
+                  className="sentinel-ai-panel"
+                  style={{
+                    flexBasis: '100%',
+                    width: '100%',
+                    marginTop: 16,
+                    padding: 18,
+                    border: '1px solid #ddd6fe',
+                    borderRadius: 12,
+                    background: '#faf9ff',
+                  }}
+                >
+                  <h3 style={{ margin: '0 0 6px', color: '#4c1d95' }}>
+                    Ask AI about this document
+                  </h3>
+                  <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: 14 }}>
+                    Ask a question using the content of {doc.originalName}.
+                  </p>
+
+                  <form
+                    onSubmit={e => {
+                      e.preventDefault();
+                      void askDocumentAI();
+                    }}
+                  >
+                    <textarea
+                      value={aiQuestion}
+                      onChange={e => setAiQuestion(e.target.value)}
+                      placeholder="Example: Summarize this document..."
+                      maxLength={2000}
+                      rows={3}
+                      required
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: 12,
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 8,
+                        font: 'inherit',
+                        resize: 'vertical',
+                      }}
+                    />
+
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
+                      <button
+                        type="button"
+                        className="action-button secondary"
+                        onClick={() => {
+                          setAiDoc(null);
+                          setAiQuestion('');
+                          setAiAnswer('');
+                        }}
+                      >
+                        Close
+                      </button>
+                      <button
+                        type="submit"
+                        className="action-button primary"
+                        disabled={aiLoading || !aiQuestion.trim()}
+                      >
+                        {aiLoading ? 'Thinking...' : 'Ask AI'}
+                      </button>
+                    </div>
+                  </form>
+
+                  {aiAnswer && (
+                    <div
+                      role="status"
+                      style={{
+                        marginTop: 16,
+                        padding: 14,
+                        borderRadius: 8,
+                        background: '#fff',
+                        border: '1px solid #ddd6fe',
+                        whiteSpace: 'pre-wrap',
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      <strong style={{ display: 'block', marginBottom: 6, color: '#4c1d95' }}>
+                        AI Answer
+                      </strong>
+                      {aiAnswer}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {owner && doc.shares && doc.shares.length > 0 && (
+                <div className="share-strip">
+                  {doc.shares.map(share => (
+                    <div className="active-share" key={share.id}>
+                      <div className="share-avatar">
+                        {(share.recipient.name || share.recipient.email).charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <strong>{share.recipient.name || share.recipient.email}</strong>
+                        <small>{share.permission} permission</small>
+                      </div>
+                      <button onClick={() => revokeShare(doc, share.id)}>Revoke</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+          );
+        })}
       </div>
     </>
   );
@@ -1087,6 +1035,88 @@ function SecurityPage() {
         <div><span>02</span><h3>Least Privilege</h3><p>Users receive only the access required for their documents.</p></div>
         <div><span>03</span><h3>Secure Sharing</h3><p>Document owners control access and can revoke permissions.</p></div>
         <div><span>04</span><h3>Defense in Depth</h3><p>Authentication, authorization and storage controls work together.</p></div>
+      </div>
+    </>
+  );
+}
+
+function ProfilePage({
+  user,
+  currentPassword,
+  setCurrentPassword,
+  newPassword,
+  setNewPassword,
+  confirmPassword,
+  setConfirmPassword,
+  changingPassword,
+  changePassword,
+}: any) {
+  return (
+    <>
+      <div className="page-title">
+        <div>
+          <span className="panel-eyebrow">ACCOUNT SETTINGS</span>
+          <h1>Profile</h1>
+          <p>Manage your account details and password.</p>
+        </div>
+      </div>
+
+      <div className="profile-grid">
+        <div className="panel profile-card">
+          <div className="profile-avatar">{(user.name || user.email).charAt(0).toUpperCase()}</div>
+          <h2>{user.name}</h2>
+          <p>{user.email}</p>
+          <span className="permission">{user.role}</span>
+
+          <div className="profile-detail"><span>Full name</span><strong>{user.name}</strong></div>
+          <div className="profile-detail"><span>Email</span><strong>{user.email}</strong></div>
+          <div className="profile-detail"><span>Department</span><strong>{user.department || 'Not specified'}</strong></div>
+          <div className="profile-detail"><span>Role</span><strong>{user.role}</strong></div>
+        </div>
+
+        <div className="panel password-panel">
+          <span className="panel-eyebrow">SECURITY SETTINGS</span>
+          <h2>Change password</h2>
+          <p>Choose a new password to protect your account.</p>
+
+          <form onSubmit={changePassword}>
+            <label htmlFor="currentPassword">Current password</label>
+            <input
+              id="currentPassword"
+              type="password"
+              value={currentPassword}
+              onChange={e => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+
+            <label htmlFor="newPassword">New password</label>
+            <input
+              id="newPassword"
+              type="password"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              autoComplete="new-password"
+              minLength={6}
+              required
+            />
+
+            <label htmlFor="confirmPassword">Confirm new password</label>
+            <input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              minLength={6}
+              required
+            />
+
+            <button className="login-button" type="submit" disabled={changingPassword}>
+              {changingPassword ? 'Updating...' : 'Update password'}
+            </button>
+          </form>
+        </div>
       </div>
     </>
   );
