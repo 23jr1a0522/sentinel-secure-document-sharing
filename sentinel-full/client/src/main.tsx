@@ -978,7 +978,7 @@ function ProfilePage({
               style={inputStyle}
             />
             <small style={{ display: 'block', marginTop: 6, color: '#64748b' }}>
-              Use at least 12 characters.
+              Use at least 6 characters.
             </small>
           </label>
 
@@ -989,7 +989,7 @@ function ProfilePage({
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
-              minLength={12}
+              minLength={6}
               maxLength={128}
               required
               style={inputStyle}
