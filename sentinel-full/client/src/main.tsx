@@ -173,7 +173,7 @@ function App() {
     setConfirmPassword('');
   }
 
-  async function changePassword(e: React.FormEvent) {
+  async function changePassword(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (changingPassword) return;
@@ -181,13 +181,27 @@ function App() {
     setError('');
     setMessage('');
 
-    if (!currentPassword || !newPassword || !confirmPassword) {
+    if (
+      !currentPassword.trim() ||
+      !newPassword ||
+      !confirmPassword
+    ) {
       setError('Please fill in all password fields.');
+      return;
+    }
+
+    if (currentPassword.length > 128) {
+      setError('Your current password cannot exceed 128 characters.');
       return;
     }
 
     if (newPassword.length < 6 || newPassword.length > 128) {
       setError('Your new password must contain between 6 and 128 characters.');
+      return;
+    }
+
+    if (confirmPassword.length > 128) {
+      setError('Your confirmation password cannot exceed 128 characters.');
       return;
     }
 
@@ -202,6 +216,7 @@ function App() {
     }
 
     setChangingPassword(true);
+    setMessage('Updating your password...');
 
     try {
       const data = await api('/auth/change-password', {
@@ -213,7 +228,7 @@ function App() {
         }),
       });
 
-      // Only clear the session after the backend confirms success.
+      // The server has confirmed that the password was changed.
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -222,12 +237,14 @@ function App() {
       setDocs([]);
       setUser(null);
       setPage('Overview');
+      setError('');
 
       setMessage(
         data?.message ||
           'Password changed successfully. Please log in using your new password.'
       );
     } catch (e) {
+      setMessage('');
       setError(
         e instanceof Error
           ? e.message
@@ -238,31 +255,40 @@ function App() {
     }
   }
 
-  async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  
+async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  setError('');
+  setMessage('');
+
+  const formData = new FormData();
+
+  formData.append('file', file);
+  formData.append('title', file.name);
+  formData.append('category', 'General');
+
+  try {
+    setMessage('Uploading document...');
+
+    await api('/documents', {
+      method: 'POST',
+      body: formData,
+    });
 
     setError('');
+    setMessage(`${file.name} uploaded and secured successfully.`);
+    await loadDocuments();
+    setPage('Documents');
+  } catch (e) {
     setMessage('');
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      await api('/documents', {
-        method: 'POST',
-        body: formData,
-      });
-
-      setMessage(`${file.name} secured successfully`);
-      await loadDocuments();
-      setPage('Documents');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed');
-    }
-
+    setError(e instanceof Error ? e.message : 'Upload failed');
+  } finally {
     e.target.value = '';
   }
+}
+
 
   async function viewDocument(doc: Doc) {
     setError('');
@@ -421,7 +447,7 @@ function App() {
             </div>
 
             {message && (
-              <div className="notification success">
+              <div className="notification success" role="status" aria-live="polite">
                 <span>✓</span>
                 {message}
                 <button type="button" onClick={() => setMessage('')}>×</button>
@@ -455,7 +481,7 @@ function App() {
                 />
               </div>
 
-              {error && <div className="login-error">{error}</div>}
+              {error && <div className="login-error" role="alert">{error}</div>}
 
               <button className="login-button" disabled={loading} type="submit">
                 <span>{loading ? 'Authenticating...' : 'Enter Secure Vault'}</span>
@@ -554,14 +580,14 @@ function App() {
 
         <div className="content">
           {message && (
-            <div className="notification success">
+            <div className="notification success" role="status" aria-live="polite">
               <span>✓</span>{message}
               <button type="button" onClick={() => setMessage('')}>×</button>
             </div>
           )}
 
           {error && (
-            <div className="notification danger">
+            <div className="notification danger" role="alert">
               <span>!</span>{error}
               <button type="button" onClick={() => setError('')}>×</button>
             </div>
@@ -712,7 +738,11 @@ function ProfilePage({
         <h2 style={{ marginTop: 10 }}>Change Password</h2>
         <p>Enter your current password and choose a new password. You will need to log in again after changing it.</p>
 
-        <form onSubmit={changePassword} style={{ display: 'grid', gap: 4, maxWidth: 480, marginTop: 24 }}>
+        <form
+          onSubmit={changePassword}
+          noValidate
+          style={{ display: 'grid', gap: 4, maxWidth: 480, marginTop: 24 }}
+        >
           <label style={labelStyle}>
             Current Password
             <input
@@ -750,7 +780,6 @@ function ProfilePage({
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
-              minLength={6}
               maxLength={128}
               required
               style={inputStyle}
@@ -767,7 +796,7 @@ function ProfilePage({
               opacity: changingPassword ? 0.7 : 1,
             }}
           >
-            {changingPassword ? 'Changing Password...' : 'Update Password'}
+            {changingPassword ? 'Updating Password...' : 'Update Password'}
           </button>
         </form>
       </div>
