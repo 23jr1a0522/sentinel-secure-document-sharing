@@ -209,7 +209,7 @@ function App() {
       return;
     }
 
-    if (newPassword.length < 12 || newPassword.length > 128) {
+    if (newPassword.length < 6 || newPassword.length > 128) {
       setError(
         'Your new password must contain between 12 and 128 characters.'
       );
@@ -972,7 +972,7 @@ function ProfilePage({
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
               autoComplete="new-password"
-              minLength={12}
+              minLength={6}
               maxLength={128}
               required
               style={inputStyle}
