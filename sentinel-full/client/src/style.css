@@ -2749,3 +2749,90 @@ a:focus-visible {
     font-size: 12px;
   }
 }
+
+/* Slightly larger and easier-to-read text */
+
+body {
+  font-size: 15px;
+}
+
+button,
+input,
+select,
+textarea {
+  font-size: 14px;
+}
+
+.nav-item {
+  font-size: 15px;
+}
+
+.side-brand strong,
+.user-menu strong {
+  font-size: 15px;
+}
+
+.page-title h1,
+.hero h1 {
+  font-size: 30px;
+}
+
+.page-title p,
+.hero p {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.stat-card strong {
+  font-size: 23px;
+}
+
+.stat-card span,
+.stat-card small {
+  font-size: 13px;
+}
+
+.quick-card h2,
+.recent-card h2 {
+  font-size: 19px;
+}
+
+.quick-action strong {
+  font-size: 15px;
+}
+
+.quick-action small,
+.file-meta,
+.shared-meta,
+.security-control p {
+  font-size: 13px;
+}
+
+.document-card h3,
+.shared-document-card h3 {
+  font-size: 16px;
+}
+
+.action-button {
+  font-size: 14px;
+  padding: 9px 12px;
+}
+
+.login-heading h1 {
+  font-size: 30px;
+}
+
+.login-heading p,
+.login-card label {
+  font-size: 15px;
+}
+
+.login-button {
+  font-size: 15px;
+}
+
+input,
+textarea,
+select {
+  line-height: 1.5;
+}
