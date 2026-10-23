@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
@@ -47,7 +47,7 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [email, setEmail] = useState('pranavi@sentinel.local');
-  const [password, setPassword] = useState('Pranavi123');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -89,20 +89,6 @@ function App() {
     return data;
   }
 
-  async function loadSession() {
-    try {
-      const data = await api('/auth/me');
-      const currentUser = data?.user || data;
-
-      if (currentUser?.id) {
-        setUser(currentUser);
-        await loadDocuments();
-      }
-    } catch {
-      setUser(null);
-    }
-  }
-
   async function loadDocuments() {
     try {
       const data = await api('/documents');
@@ -119,11 +105,7 @@ function App() {
     }
   }
 
-  useEffect(() => {
-    void loadSession();
-  }, []);
-
-  async function login(e: React.FormEvent) {
+  async function login(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setMessage('');
@@ -148,7 +130,7 @@ function App() {
       setPassword('');
       setPage('Overview');
       await loadDocuments();
-      setMessage('Welcome back to Sentinel');
+      setMessage('Welcome to Sentinel');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invalid email or password');
     } finally {
@@ -160,11 +142,12 @@ function App() {
     try {
       await api('/auth/logout', { method: 'POST' });
     } catch {
-      // Clear local session even if the server logout request fails.
+      // Clear the local interface even if the server request fails.
     }
 
     setUser(null);
     setDocs([]);
+    setPassword('');
     setPage('Overview');
     setMessage('');
     setError('');
@@ -181,11 +164,7 @@ function App() {
     setError('');
     setMessage('');
 
-    if (
-      !currentPassword.trim() ||
-      !newPassword ||
-      !confirmPassword
-    ) {
+    if (!currentPassword || !newPassword || !confirmPassword) {
       setError('Please fill in all password fields.');
       return;
     }
@@ -228,7 +207,6 @@ function App() {
         }),
       });
 
-      // The server has confirmed that the password was changed.
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -238,10 +216,9 @@ function App() {
       setUser(null);
       setPage('Overview');
       setError('');
-
       setMessage(
         data?.message ||
-          'Password changed successfully. Please log in using your new password.'
+        'Password changed successfully. Please log in using your new password.'
       );
     } catch (e) {
       setMessage('');
@@ -255,40 +232,37 @@ function App() {
     }
   }
 
-  
-async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
-  const file = e.target.files?.[0];
-  if (!file) return;
+  async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
 
-  setError('');
-  setMessage('');
-
-  const formData = new FormData();
-
-  formData.append('file', file);
-  formData.append('title', file.name);
-  formData.append('category', 'General');
-
-  try {
-    setMessage('Uploading document...');
-
-    await api('/documents', {
-      method: 'POST',
-      body: formData,
-    });
+    if (!file) return;
 
     setError('');
-    setMessage(`${file.name} uploaded and secured successfully.`);
-    await loadDocuments();
-    setPage('Documents');
-  } catch (e) {
-    setMessage('');
-    setError(e instanceof Error ? e.message : 'Upload failed');
-  } finally {
-    e.target.value = '';
-  }
-}
+    setMessage('Uploading document...');
 
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('title', file.name);
+    formData.append('category', 'General');
+
+    try {
+      await api('/documents', {
+        method: 'POST',
+        body: formData,
+      });
+
+      setError('');
+      setMessage(`${file.name} uploaded and secured successfully.`);
+      await loadDocuments();
+      setPage('Documents');
+    } catch (e) {
+      setMessage('');
+      setError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      input.value = '';
+    }
+  }
 
   async function viewDocument(doc: Doc) {
     setError('');
@@ -307,9 +281,10 @@ async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
     setMessage('');
 
     try {
-      const response = await fetch(`${API}/documents/${doc.id}/download`, {
-        credentials: 'include',
-      });
+      const response = await fetch(
+        `${API}/documents/${doc.id}/download`,
+        { credentials: 'include' }
+      );
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -418,9 +393,12 @@ async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
 
   const filteredDocs = useMemo(() => {
     const value = search.toLowerCase().trim();
+
     if (!value) return docs;
 
-    return docs.filter(doc => doc.originalName.toLowerCase().includes(value));
+    return docs.filter(doc =>
+      doc.originalName.toLowerCase().includes(value)
+    );
   }, [docs, search]);
 
   if (!user) {
@@ -440,6 +418,7 @@ async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
 
           <div className="login-card">
             <div className="login-icon">🛡</div>
+
             <div className="login-heading">
               <span className="eyebrow">SECURE ACCESS</span>
               <h1>Welcome back.</h1>
@@ -481,7 +460,9 @@ async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
                 />
               </div>
 
-              {error && <div className="login-error" role="alert">{error}</div>}
+              {error && (
+                <div className="login-error" role="alert">{error}</div>
+              )}
 
               <button className="login-button" disabled={loading} type="submit">
                 <span>{loading ? 'Authenticating...' : 'Enter Secure Vault'}</span>
@@ -568,11 +549,16 @@ async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
             <div className="user-menu">
               <div className="avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</div>
               <div><strong>{user.name}</strong><small>{user.role}</small></div>
-              <button className="logout-button" onClick={() => {
-                setError('');
-                setMessage('');
-                setPage('Profile');
-              }}>Profile</button>
+              <button
+                className="logout-button"
+                onClick={() => {
+                  setError('');
+                  setMessage('');
+                  setPage('Profile');
+                }}
+              >
+                Profile
+              </button>
               <button className="logout-button" onClick={logout}>Logout</button>
             </div>
           </div>
@@ -595,29 +581,43 @@ async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
 
           {page === 'Overview' && (
             <OverviewPage
-              user={user} docs={docs} ownedDocs={ownedDocs}
-              sharedDocs={sharedDocs} totalShares={totalShares}
-              storageUsed={storageUsed} formatBytes={formatBytes}
-              setPage={setPage} uploadFile={uploadFile}
-              viewDocument={viewDocument} downloadDocument={downloadDocument}
+              user={user}
+              docs={docs}
+              ownedDocs={ownedDocs}
+              sharedDocs={sharedDocs}
+              totalShares={totalShares}
+              storageUsed={storageUsed}
+              formatBytes={formatBytes}
+              setPage={setPage}
+              uploadFile={uploadFile}
+              viewDocument={viewDocument}
+              downloadDocument={downloadDocument}
               formatDate={formatDate}
             />
           )}
 
           {page === 'Documents' && (
             <DocumentsPage
-              docs={filteredDocs} search={search} setSearch={setSearch}
-              uploadFile={uploadFile} user={user}
-              viewDocument={viewDocument} downloadDocument={downloadDocument}
-              setShareDoc={setShareDoc} formatBytes={formatBytes}
-              formatDate={formatDate} revokeShare={revokeShare}
+              docs={filteredDocs}
+              search={search}
+              setSearch={setSearch}
+              uploadFile={uploadFile}
+              user={user}
+              viewDocument={viewDocument}
+              downloadDocument={downloadDocument}
+              setShareDoc={setShareDoc}
+              formatBytes={formatBytes}
+              formatDate={formatDate}
+              revokeShare={revokeShare}
             />
           )}
 
           {page === 'Shared Access' && (
             <SharedPage
-              docs={sharedDocs} viewDocument={viewDocument}
-              downloadDocument={downloadDocument} formatBytes={formatBytes}
+              docs={sharedDocs}
+              viewDocument={viewDocument}
+              downloadDocument={downloadDocument}
+              formatBytes={formatBytes}
               formatDate={formatDate}
             />
           )}
@@ -663,10 +663,18 @@ async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
 
             <label>Permission level</label>
             <div className="permission-selector">
-              <button type="button" className={permission === 'VIEW' ? 'selected' : ''} onClick={() => setPermission('VIEW')}>
+              <button
+                type="button"
+                className={permission === 'VIEW' ? 'selected' : ''}
+                onClick={() => setPermission('VIEW')}
+              >
                 <strong>VIEW</strong><small>Can open the document</small>
               </button>
-              <button type="button" className={permission === 'DOWNLOAD' ? 'selected' : ''} onClick={() => setPermission('DOWNLOAD')}>
+              <button
+                type="button"
+                className={permission === 'DOWNLOAD' ? 'selected' : ''}
+                onClick={() => setPermission('DOWNLOAD')}
+              >
                 <strong>DOWNLOAD</strong><small>Can view and download</small>
               </button>
             </div>
@@ -674,7 +682,10 @@ async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
             <button className="modal-share-button" onClick={shareDocument}>
               <span>Grant Secure Access</span><span>→</span>
             </button>
-            <div className="modal-warning"><span>🛡</span><span>Access can be revoked by the document owner at any time.</span></div>
+            <div className="modal-warning">
+              <span>🛡</span>
+              <span>Access can be revoked by the document owner at any time.</span>
+            </div>
           </div>
         </div>
       )}
@@ -805,8 +816,18 @@ function ProfilePage({
 }
 
 function OverviewPage({
-  user, docs, ownedDocs, sharedDocs, totalShares, storageUsed,
-  formatBytes, setPage, uploadFile, viewDocument, downloadDocument, formatDate,
+  user,
+  docs,
+  ownedDocs,
+  sharedDocs,
+  totalShares,
+  storageUsed,
+  formatBytes,
+  setPage,
+  uploadFile,
+  viewDocument,
+  downloadDocument,
+  formatDate,
 }: any) {
   return (
     <>
@@ -832,12 +853,23 @@ function OverviewPage({
 
       <section className="overview-grid">
         <div className="quick-card">
-          <div className="quick-heading"><div><span className="panel-eyebrow">QUICK ACTIONS</span><h2>Manage your vault</h2></div></div>
+          <div className="quick-heading">
+            <div><span className="panel-eyebrow">QUICK ACTIONS</span><h2>Manage your vault</h2></div>
+          </div>
           <div className="quick-actions">
-            <label className="quick-action blue"><input type="file" onChange={uploadFile} /><span>＋</span><strong>Upload Document</strong><small>Secure a new file</small></label>
-            <button className="quick-action purple" onClick={() => setPage('Documents')}><span>▣</span><strong>View Documents</strong><small>Manage your files</small></button>
-            <button className="quick-action green" onClick={() => setPage('Shared Access')}><span>♧</span><strong>Shared Access</strong><small>Review permissions</small></button>
-            <button className="quick-action orange" onClick={() => setPage('Security')}><span>◈</span><strong>Security Center</strong><small>Check protection</small></button>
+            <label className="quick-action blue">
+              <input type="file" onChange={uploadFile} />
+              <span>＋</span><strong>Upload Document</strong><small>Secure a new file</small>
+            </label>
+            <button className="quick-action purple" onClick={() => setPage('Documents')}>
+              <span>▣</span><strong>View Documents</strong><small>Manage your files</small>
+            </button>
+            <button className="quick-action green" onClick={() => setPage('Shared Access')}>
+              <span>♧</span><strong>Shared Access</strong><small>Review permissions</small>
+            </button>
+            <button className="quick-action orange" onClick={() => setPage('Security')}>
+              <span>◈</span><strong>Security Center</strong><small>Check protection</small>
+            </button>
           </div>
         </div>
 
@@ -846,7 +878,9 @@ function OverviewPage({
             <div><span className="panel-eyebrow">RECENT ACTIVITY</span><h2>Recent Documents</h2></div>
             <button className="text-button" onClick={() => setPage('Documents')}>View all →</button>
           </div>
-          {docs.length === 0 ? <div className="small-empty">No documents yet.</div> : docs.slice(0, 4).map((doc: Doc) => (
+          {docs.length === 0 ? (
+            <div className="small-empty">No documents yet.</div>
+          ) : docs.slice(0, 4).map((doc: Doc) => (
             <div className="recent-document" key={doc.id}>
               <div className="recent-icon">▤</div>
               <div><strong>{doc.originalName}</strong><small>{formatDate(doc.createdAt)}</small></div>
@@ -858,7 +892,11 @@ function OverviewPage({
 
       <section className="overview-security">
         <div className="overview-security-icon">🛡</div>
-        <div><span className="panel-eyebrow">SENTINEL PROTECTION</span><h2>Your workspace is protected.</h2><p>Authentication, authorization, private storage and document permissions are enforced by the server.</p></div>
+        <div>
+          <span className="panel-eyebrow">SENTINEL PROTECTION</span>
+          <h2>Your workspace is protected.</h2>
+          <p>Authentication, authorization, private storage and document permissions are enforced by the server.</p>
+        </div>
         <button onClick={() => setPage('Security')}>Security Center →</button>
       </section>
     </>
@@ -866,47 +904,84 @@ function OverviewPage({
 }
 
 function DocumentsPage({
-  docs, search, setSearch, uploadFile, user, viewDocument,
-  downloadDocument, setShareDoc, formatBytes, formatDate, revokeShare,
+  docs,
+  search,
+  setSearch,
+  uploadFile,
+  user,
+  viewDocument,
+  downloadDocument,
+  setShareDoc,
+  formatBytes,
+  formatDate,
+  revokeShare,
 }: any) {
   return (
     <>
       <div className="page-title">
-        <div><span className="panel-eyebrow">DOCUMENT MANAGEMENT</span><h1>Documents</h1><p>Securely manage all documents available to your account.</p></div>
-        <label className="upload-button"><input type="file" onChange={uploadFile} />＋ Secure Upload</label>
+        <div>
+          <span className="panel-eyebrow">DOCUMENT MANAGEMENT</span>
+          <h1>Documents</h1>
+          <p>Securely manage all documents available to your account.</p>
+        </div>
+        <label className="upload-button">
+          <input type="file" onChange={uploadFile} />＋ Secure Upload
+        </label>
       </div>
 
       <div className="documents-full">
         <div className="document-toolbar">
-          <div className="search-box"><span>⌕</span><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search documents..." /></div>
+          <div className="search-box">
+            <span>⌕</span>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search documents..."
+            />
+          </div>
           <div className="protected-label"><span className="green-dot" />{docs.length} documents</div>
         </div>
 
         <div className="document-list">
           {docs.length === 0 ? (
-            <div className="empty-state"><div>▣</div><h3>No documents found</h3><p>Upload a document to your secure vault.</p></div>
+            <div className="empty-state">
+              <div>▣</div><h3>No documents found</h3><p>Upload a document to your secure vault.</p>
+            </div>
           ) : docs.map((doc: Doc) => {
             const owner = doc.ownerId === user.id;
+
             return (
               <article className="document-card" key={doc.id}>
                 <div className="file-icon">▤<small>FILE</small></div>
                 <div className="file-info">
                   <h3>{doc.originalName}</h3>
-                  <div className="file-meta"><span>{formatBytes(doc.size)}</span><i /><span>{formatDate(doc.createdAt)}</span></div>
-                  <div className={owner ? 'owner-badge' : 'owner-badge shared'}>● {owner ? 'Owned by you' : 'Shared with you'}</div>
+                  <div className="file-meta">
+                    <span>{formatBytes(doc.size)}</span><i /><span>{formatDate(doc.createdAt)}</span>
+                  </div>
+                  <div className={owner ? 'owner-badge' : 'owner-badge shared'}>
+                    ● {owner ? 'Owned by you' : 'Shared with you'}
+                  </div>
                 </div>
-                <div className="permission-area"><span className="permission">{owner ? 'OWNER' : 'SHARED'}</span></div>
+                <div className="permission-area">
+                  <span className="permission">{owner ? 'OWNER' : 'SHARED'}</span>
+                </div>
                 <div className="document-actions">
                   <button className="action-button secondary" onClick={() => viewDocument(doc)}>View</button>
                   <button className="action-button primary" onClick={() => downloadDocument(doc)}>↓</button>
                   {owner && <button className="action-button share" onClick={() => setShareDoc(doc)}>♧</button>}
                 </div>
+
                 {owner && doc.shares && doc.shares.length > 0 && (
                   <div className="share-strip">
                     {doc.shares.map(share => (
                       <div className="active-share" key={share.id}>
-                        <div className="share-avatar">{(share.recipient.name || share.recipient.email).charAt(0).toUpperCase()}</div>
-                        <div><strong>{share.recipient.name || share.recipient.email}</strong><small>{share.permission} permission</small></div>
+                        <div className="share-avatar">
+                          {(share.recipient.name || share.recipient.email).charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <strong>{share.recipient.name || share.recipient.email}</strong>
+                          <small>{share.permission} permission</small>
+                        </div>
                         <button onClick={() => revokeShare(doc, share.id)}>Revoke</button>
                       </div>
                     ))}
@@ -925,25 +1000,42 @@ function SharedPage({ docs, viewDocument, downloadDocument, formatBytes, formatD
   return (
     <>
       <div className="page-title">
-        <div><span className="panel-eyebrow">ACCESS MANAGEMENT</span><h1>Shared Access</h1><p>Documents other users have securely shared with you.</p></div>
+        <div>
+          <span className="panel-eyebrow">ACCESS MANAGEMENT</span>
+          <h1>Shared Access</h1>
+          <p>Documents other users have securely shared with you.</p>
+        </div>
         <div className="access-summary"><strong>{docs.length}</strong><span>shared documents</span></div>
       </div>
 
-      <div className="shared-info-banner"><div>♧</div><section><strong>Controlled document access</strong><p>Your access depends on the permission granted by the document owner. VIEW access does not allow downloading.</p></section></div>
+      <div className="shared-info-banner">
+        <div>♧</div>
+        <section>
+          <strong>Controlled document access</strong>
+          <p>Your access depends on the permission granted by the document owner. VIEW access does not allow downloading.</p>
+        </section>
+      </div>
 
       <div className="documents-full">
         {docs.length === 0 ? (
-          <div className="empty-state"><div>♧</div><h3>No shared documents</h3><p>Documents shared with you will appear here.</p></div>
+          <div className="empty-state">
+            <div>♧</div><h3>No shared documents</h3><p>Documents shared with you will appear here.</p>
+          </div>
         ) : (
           <div className="shared-grid">
             {docs.map((doc: Doc) => (
               <div className="shared-document-card" key={doc.id}>
-                <div className="shared-file-top"><div className="file-icon">▤</div><span className="permission">SHARED</span></div>
+                <div className="shared-file-top">
+                  <div className="file-icon">▤</div><span className="permission">SHARED</span>
+                </div>
                 <h3>{doc.originalName}</h3>
                 <div className="shared-meta"><span>Size</span><strong>{formatBytes(doc.size)}</strong></div>
                 <div className="shared-meta"><span>Shared</span><strong>{formatDate(doc.createdAt)}</strong></div>
                 <div className="shared-owner"><span>Owner</span><strong>{doc.owner?.name || 'Document Owner'}</strong></div>
-                <div className="shared-actions"><button onClick={() => viewDocument(doc)}>View</button><button onClick={() => downloadDocument(doc)}>Download</button></div>
+                <div className="shared-actions">
+                  <button onClick={() => viewDocument(doc)}>View</button>
+                  <button onClick={() => downloadDocument(doc)}>Download</button>
+                </div>
               </div>
             ))}
           </div>
@@ -957,7 +1049,11 @@ function SecurityPage() {
   return (
     <>
       <div className="page-title">
-        <div><span className="panel-eyebrow">SECURITY CENTER</span><h1>Security</h1><p>Monitor the protection mechanisms securing your Sentinel workspace.</p></div>
+        <div>
+          <span className="panel-eyebrow">SECURITY CENTER</span>
+          <h1>Security</h1>
+          <p>Monitor the protection mechanisms securing your Sentinel workspace.</p>
+        </div>
         <div className="security-status-badge"><span />SYSTEM SECURE</div>
       </div>
 
