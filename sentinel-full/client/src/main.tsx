@@ -339,6 +339,30 @@ function App() {
     }
   }
 
+  async function deleteDocument(doc: Doc) {
+    if (!window.confirm(`Delete ${doc.originalName}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setError('');
+    setMessage('');
+
+    try {
+      await api(`/documents/${doc.id}`, { method: 'DELETE' });
+
+      if (aiDoc?.id === doc.id) {
+        setAiDoc(null);
+        setAiQuestion('');
+        setAiAnswer('');
+      }
+
+      setMessage(`${doc.originalName} deleted successfully.`);
+      await loadDocuments();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to delete document');
+    }
+  }
+
   async function shareDocument() {
     if (!shareDoc) return;
 
@@ -643,10 +667,11 @@ function App() {
               aiQuestion={aiQuestion}
               setAiQuestion={setAiQuestion}
               aiAnswer={aiAnswer}
-              setAiAnswer={setAiAnswer}
-              setError={setError}
               aiLoading={aiLoading}
               askDocumentAI={askDocumentAI}
+              setAiAnswer={setAiAnswer}
+              setError={setError}
+              deleteDocument={deleteDocument}
             />
           )}
 
@@ -958,10 +983,11 @@ function DocumentsPage({
   aiQuestion,
   setAiQuestion,
   aiAnswer,
-  setAiAnswer,
-  setError,
   aiLoading,
   askDocumentAI,
+  setAiAnswer,
+  setError,
+  deleteDocument,
 }: any) {
   return (
     <>
@@ -1017,6 +1043,14 @@ function DocumentsPage({
                   <button className="action-button primary" onClick={() => downloadDocument(doc)}>↓</button>
                   {owner && (
                     <button className="action-button share" onClick={() => setShareDoc(doc)} type="button">Share</button>
+                  )}
+                  {owner && (
+                    <button
+                      className="action-button"
+                      style={{ background: '#fee2e2', color: '#b91c1c' }}
+                      onClick={() => void deleteDocument(doc)}
+                      type="button"
+                    >Delete</button>
                   )}
                   <button
                     className="action-button"
