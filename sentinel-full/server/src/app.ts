@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -31,6 +32,9 @@ import { z } from 'zod';
 
 const app = express();
 
+// Render runs the application behind a proxy.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 
 app.use(
@@ -52,14 +56,16 @@ const authLimiter = rateLimit({
 
 const sensitiveLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false
 });
 
 /* =========================
    HEALTH
 ========================= */
 
-app.get('/api/health', (_, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
     service: 'sentinel-api'
@@ -76,7 +82,7 @@ app.post(
   async (req, res) => {
     const p = z
       .object({
-        name: z.string().min(2).max(100),
+        name: z.string().trim().min(2).max(100),
         email: z.string().email(),
         password: z.string().min(12).max(128)
       })
@@ -90,11 +96,11 @@ app.post(
 
     const email = p.data.email.toLowerCase();
 
-    if (
-      await prisma.user.findUnique({
-        where: { email }
-      })
-    ) {
+    const existing = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (existing) {
       return res.status(409).json({
         error: 'Account already exists'
       });
@@ -104,14 +110,12 @@ app.post(
       data: {
         name: p.data.name,
         email,
-        passwordHash: await argon2.hash(
-          p.data.password
-        ),
+        passwordHash: await argon2.hash(p.data.password),
         role: 'EMPLOYEE'
       }
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       id: user.id,
       email: user.email,
       name: user.name
@@ -142,14 +146,14 @@ app.post(
 
     const email = p.data.email.toLowerCase();
 
-    const u = await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { email }
     });
 
     if (
-      !u ||
+      !user ||
       !(await argon2.verify(
-        u.passwordHash,
+        user.passwordHash,
         p.data.password
       ))
     ) {
@@ -168,7 +172,7 @@ app.post(
     await prisma.session.create({
       data: {
         id: sid,
-        userId: u.id,
+        userId: user.id,
         expiresAt: new Date(
           Date.now() + 8 * 60 * 60 * 1000
         )
@@ -179,20 +183,21 @@ app.post(
       httpOnly: true,
       sameSite: 'lax',
       secure: env.COOKIE_SECURE,
-      maxAge: 8 * 60 * 60 * 1000
+      maxAge: 8 * 60 * 60 * 1000,
+      path: '/'
     });
 
     await audit('LOGIN', {
-      userId: u.id,
+      userId: user.id,
       success: true,
       ip: req.ip
     });
 
-    res.json({
-      id: u.id,
-      email: u.email,
-      name: u.name,
-      role: u.role
+    return res.json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role
     });
   }
 );
@@ -205,15 +210,23 @@ app.post(
   '/api/auth/logout',
   requireAuth,
   async (req: AuthRequest, res) => {
-    const sid = req.cookies.sentinel_session;
+    const sid = req.cookies?.sentinel_session;
 
-    await prisma.session
-      .delete({
-        where: { id: sid }
-      })
-      .catch(() => {});
+    if (sid) {
+      await prisma.session.deleteMany({
+        where: {
+          id: sid,
+          userId: req.user!.id
+        }
+      });
+    }
 
-    res.clearCookie('sentinel_session');
+    res.clearCookie('sentinel_session', {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: env.COOKIE_SECURE,
+      path: '/'
+    });
 
     await audit('LOGOUT', {
       userId: req.user!.id,
@@ -221,24 +234,148 @@ app.post(
       ip: req.ip
     });
 
-    res.status(204).end();
+    return res.status(204).end();
   }
 );
 
 /* =========================
-   CURRENT USER
+   PROFILE / CURRENT USER
 ========================= */
 
 app.get(
   '/api/auth/me',
   requireAuth,
-  (req: AuthRequest, res) => {
-    res.json(req.user);
+  async (req: AuthRequest, res) => {
+    const user = await prisma.user.findUnique({
+      where: {
+        id: req.user!.id
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        department: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        error: 'User not found'
+      });
+    }
+
+    return res.json(user);
   }
 );
 
 /* =========================
-   FILE UPLOAD
+   CHANGE PASSWORD
+========================= */
+
+app.post(
+  '/api/auth/change-password',
+  requireAuth,
+  authLimiter,
+  async (req: AuthRequest, res) => {
+    const p = z
+      .object({
+        currentPassword: z.string().min(1).max(128),
+        newPassword: z.string().min(12).max(128),
+        confirmPassword: z.string().min(1).max(128)
+      })
+      .safeParse(req.body);
+
+    if (!p.success) {
+      return res.status(400).json({
+        error:
+          'Enter a valid current password and a new password between 12 and 128 characters.'
+      });
+    }
+
+    if (p.data.newPassword !== p.data.confirmPassword) {
+      return res.status(400).json({
+        error: 'New passwords do not match.'
+      });
+    }
+
+    if (p.data.currentPassword === p.data.newPassword) {
+      return res.status(400).json({
+        error: 'Your new password must be different.'
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: req.user!.id
+      }
+    });
+
+    if (
+      !user ||
+      !(await argon2.verify(
+        user.passwordHash,
+        p.data.currentPassword
+      ))
+    ) {
+      // Use an audit action already supported by the project.
+      await audit('LOGIN_FAILED', {
+        userId: req.user!.id,
+        success: false,
+        ip: req.ip,
+        details: 'Password change failed'
+      });
+
+      return res.status(400).json({
+        error: 'Current password is incorrect.'
+      });
+    }
+
+    const passwordHash = await argon2.hash(
+      p.data.newPassword
+    );
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: {
+          id: user.id
+        },
+        data: {
+          passwordHash
+        }
+      }),
+      prisma.session.deleteMany({
+        where: {
+          userId: user.id
+        }
+      }),
+      prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'LOGIN',
+          success: true,
+          ip: req.ip,
+          details: 'Password changed successfully'
+        }
+      })
+    ]);
+
+    res.clearCookie('sentinel_session', {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: env.COOKIE_SECURE,
+      path: '/'
+    });
+
+    return res.json({
+      message:
+        'Password changed successfully. Please log in again.'
+    });
+  }
+);
+
+/* =========================
+   FILE UPLOAD CONFIGURATION
 ========================= */
 
 const upload = multer({
@@ -258,107 +395,93 @@ app.get(
   async (req: AuthRequest, res) => {
     const uid = req.user!.id;
 
-    const ownedDocs =
-      await prisma.document.findMany({
-        where: {
-          ownerId: uid
+    const ownedDocs = await prisma.document.findMany({
+      where: {
+        ownerId: uid
+      },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        originalName: true,
+        mimeType: true,
+        size: true,
+        createdAt: true,
+        ownerId: true,
+        owner: {
+          select: {
+            name: true,
+            email: true
+          }
         },
-
-        select: {
-          id: true,
-          title: true,
-          category: true,
-          originalName: true,
-          mimeType: true,
-          size: true,
-          createdAt: true,
-          ownerId: true,
-
-          owner: {
-            select: {
-              name: true,
-              email: true
-            }
+        shares: {
+          where: {
+            revokedAt: null
           },
-
-          shares: {
-            where: {
-              revokedAt: null
-            },
-
-            select: {
-              id: true,
-              permission: true,
-
-              recipient: {
-                select: {
-                  email: true,
-                  name: true
-                }
+          select: {
+            id: true,
+            permission: true,
+            recipient: {
+              select: {
+                email: true,
+                name: true
               }
             }
           }
-        },
-
-        orderBy: {
-          createdAt: 'desc'
         }
-      });
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
 
-    const sharedDocs =
-      await prisma.document.findMany({
-        where: {
-          shares: {
-            some: {
-              recipientId: uid,
-              revokedAt: null
-            }
+    const sharedDocs = await prisma.document.findMany({
+      where: {
+        shares: {
+          some: {
+            recipientId: uid,
+            revokedAt: null
+          }
+        }
+      },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        originalName: true,
+        mimeType: true,
+        size: true,
+        createdAt: true,
+        ownerId: true,
+        owner: {
+          select: {
+            name: true,
+            email: true
           }
         },
-
-        select: {
-          id: true,
-          title: true,
-          category: true,
-          originalName: true,
-          mimeType: true,
-          size: true,
-          createdAt: true,
-          ownerId: true,
-
-          owner: {
-            select: {
-              name: true,
-              email: true
-            }
+        shares: {
+          where: {
+            recipientId: uid,
+            revokedAt: null
           },
-
-          shares: {
-            where: {
-              recipientId: uid,
-              revokedAt: null
-            },
-
-            select: {
-              id: true,
-              permission: true,
-
-              recipient: {
-                select: {
-                  email: true,
-                  name: true
-                }
+          select: {
+            id: true,
+            permission: true,
+            recipient: {
+              select: {
+                email: true,
+                name: true
               }
             }
           }
-        },
-
-        orderBy: {
-          createdAt: 'desc'
         }
-      });
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
 
-    res.json([
+    return res.json([
       ...ownedDocs,
       ...sharedDocs
     ]);
@@ -380,11 +503,13 @@ app.post(
       });
     }
 
+    let storageName: string | undefined;
+
     try {
       const p = z
         .object({
-          title: z.string().min(1).max(150),
-          category: z.string().min(1).max(80)
+          title: z.string().trim().min(1).max(150),
+          category: z.string().trim().min(1).max(80)
         })
         .parse(req.body);
 
@@ -394,46 +519,36 @@ app.post(
         req.file.size
       );
 
-      const storageName = newStorageName(
+      storageName = newStorageName(
         req.file.originalname
       );
 
-      await saveTemp(
-        req.file,
-        storageName
-      );
+      await saveTemp(req.file, storageName);
 
-      try {
-        const d =
-          await prisma.document.create({
-            data: {
-              ownerId: req.user!.id,
-              title: p.title,
-              category: p.category,
-              originalName:
-                req.file.originalname,
-              storageName,
-              mimeType: req.file.mimetype,
-              size: req.file.size
-            }
-          });
+      const document = await prisma.document.create({
+        data: {
+          ownerId: req.user!.id,
+          title: p.title,
+          category: p.category,
+          originalName: req.file.originalname,
+          storageName,
+          mimeType: req.file.mimetype,
+          size: req.file.size
+        }
+      });
 
-        await audit('UPLOAD', {
-          userId: req.user!.id,
-          documentId: d.id,
-          success: true,
-          ip: req.ip
-        });
+      await audit('UPLOAD', {
+        userId: req.user!.id,
+        documentId: document.id,
+        success: true,
+        ip: req.ip
+      });
 
-        res.status(201).json(d);
-      } catch (e) {
-        await removeFile(storageName);
-        throw e;
+      return res.status(201).json(document);
+    } catch (error) {
+      if (storageName) {
+        await removeFile(storageName).catch(() => {});
       }
-    } catch (e) {
-      await removeFile(
-        req.file.filename
-      ).catch(() => {});
 
       await audit('UPLOAD', {
         userId: req.user!.id,
@@ -444,10 +559,14 @@ app.post(
 
       return res.status(400).json({
         error:
-          e instanceof Error
-            ? e.message
+          error instanceof Error
+            ? error.message
             : 'Upload failed'
       });
+    } finally {
+      await fs.promises
+        .unlink(req.file.path)
+        .catch(() => {});
     }
   }
 );
@@ -460,18 +579,15 @@ app.get(
   '/api/documents/:id',
   requireAuth,
   async (req: AuthRequest, res) => {
-    const documentId = String(
-      req.params.id
+    const documentId = String(req.params.id);
+
+    const document = await getAuthorizedDocument(
+      req.user!.id,
+      documentId,
+      'VIEW'
     );
 
-    const d =
-      await getAuthorizedDocument(
-        req.user!.id,
-        documentId,
-        'VIEW'
-      );
-
-    if (!d) {
+    if (!document) {
       await audit('ACCESS_DENIED', {
         userId: req.user!.id,
         documentId,
@@ -486,20 +602,20 @@ app.get(
 
     await audit('VIEW', {
       userId: req.user!.id,
-      documentId: d.id,
+      documentId: document.id,
       success: true,
       ip: req.ip
     });
 
-    res.json({
-      id: d.id,
-      title: d.title,
-      category: d.category,
-      originalName: d.originalName,
-      mimeType: d.mimeType,
-      size: d.size,
-      createdAt: d.createdAt,
-      ownerId: d.ownerId
+    return res.json({
+      id: document.id,
+      title: document.title,
+      category: document.category,
+      originalName: document.originalName,
+      mimeType: document.mimeType,
+      size: document.size,
+      createdAt: document.createdAt,
+      ownerId: document.ownerId
     });
   }
 );
@@ -513,18 +629,15 @@ app.get(
   requireAuth,
   sensitiveLimiter,
   async (req: AuthRequest, res) => {
-    const documentId = String(
-      req.params.id
+    const documentId = String(req.params.id);
+
+    const document = await getAuthorizedDocument(
+      req.user!.id,
+      documentId,
+      'DOWNLOAD'
     );
 
-    const d =
-      await getAuthorizedDocument(
-        req.user!.id,
-        documentId,
-        'DOWNLOAD'
-      );
-
-    if (!d) {
+    if (!document) {
       await audit('ACCESS_DENIED', {
         userId: req.user!.id,
         documentId,
@@ -537,11 +650,9 @@ app.get(
       });
     }
 
-    if (
-      !fs.existsSync(
-        storagePath(d.storageName)
-      )
-    ) {
+    const filePath = storagePath(document.storageName);
+
+    if (!fs.existsSync(filePath)) {
       return res.status(404).json({
         error: 'File unavailable'
       });
@@ -549,14 +660,14 @@ app.get(
 
     await audit('DOWNLOAD', {
       userId: req.user!.id,
-      documentId: d.id,
+      documentId: document.id,
       success: true,
       ip: req.ip
     });
 
-    res.download(
-      storagePath(d.storageName),
-      d.originalName
+    return res.download(
+      filePath,
+      document.originalName
     );
   }
 );
@@ -569,9 +680,7 @@ app.post(
   '/api/documents/:id/share',
   requireAuth,
   async (req: AuthRequest, res) => {
-    const documentId = String(
-      req.params.id
-    );
+    const documentId = String(req.params.id);
 
     if (
       !(await canShare(
@@ -580,18 +689,14 @@ app.post(
       ))
     ) {
       return res.status(403).json({
-        error:
-          'Only the owner can share this document'
+        error: 'Only the owner can share this document'
       });
     }
 
     const p = z
       .object({
         recipientEmail: z.string().email(),
-        permission: z.enum([
-          'VIEW',
-          'DOWNLOAD'
-        ])
+        permission: z.enum(['VIEW', 'DOWNLOAD'])
       })
       .safeParse(req.body);
 
@@ -601,67 +706,57 @@ app.post(
       });
     }
 
-    const recipient =
-      await prisma.user.findUnique({
-        where: {
-          email:
-            p.data.recipientEmail.toLowerCase()
-        }
-      });
+    const recipient = await prisma.user.findUnique({
+      where: {
+        email: p.data.recipientEmail.toLowerCase()
+      }
+    });
 
-    if (
-      !recipient ||
-      recipient.id === req.user!.id
-    ) {
+    if (!recipient || recipient.id === req.user!.id) {
       return res.status(400).json({
         error: 'Invalid recipient'
       });
     }
 
-    const d =
-      await prisma.document.findUnique({
-        where: {
-          id: documentId
-        }
-      });
+    const document = await prisma.document.findUnique({
+      where: {
+        id: documentId
+      }
+    });
 
-    if (!d) {
+    if (!document) {
       return res.status(404).json({
         error: 'Document not found'
       });
     }
 
-    const share =
-      await prisma.documentShare.upsert({
-        where: {
-          documentId_recipientId: {
-            documentId: d.id,
-            recipientId: recipient.id
-          }
-        },
-
-        update: {
-          permission: p.data.permission,
-          revokedAt: null
-        },
-
-        create: {
-          documentId: d.id,
-          recipientId: recipient.id,
-          permission: p.data.permission
+    const share = await prisma.documentShare.upsert({
+      where: {
+        documentId_recipientId: {
+          documentId: document.id,
+          recipientId: recipient.id
         }
-      });
+      },
+      update: {
+        permission: p.data.permission,
+        revokedAt: null
+      },
+      create: {
+        documentId: document.id,
+        recipientId: recipient.id,
+        permission: p.data.permission
+      }
+    });
 
     await audit('SHARE', {
       userId: req.user!.id,
-      documentId: d.id,
+      documentId: document.id,
       success: true,
       ip: req.ip,
-      details:
-        `shared with ${recipient.id}`
+      details: `shared with ${recipient.id}`
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       id: share.id,
       permission: share.permission,
       recipient: recipient.email
@@ -677,13 +772,8 @@ app.post(
   '/api/documents/:id/revoke/:shareId',
   requireAuth,
   async (req: AuthRequest, res) => {
-    const documentId = String(
-      req.params.id
-    );
-
-    const shareId = String(
-      req.params.shareId
-    );
+    const documentId = String(req.params.id);
+    const shareId = String(req.params.shareId);
 
     if (
       !(await canShare(
@@ -692,18 +782,16 @@ app.post(
       ))
     ) {
       return res.status(403).json({
-        error:
-          'Only the owner can revoke access'
+        error: 'Only the owner can revoke access'
       });
     }
 
-    const share =
-      await prisma.documentShare.findFirst({
-        where: {
-          id: shareId,
-          documentId
-        }
-      });
+    const share = await prisma.documentShare.findFirst({
+      where: {
+        id: shareId,
+        documentId
+      }
+    });
 
     if (!share) {
       return res.status(404).json({
@@ -715,7 +803,6 @@ app.post(
       where: {
         id: share.id
       },
-
       data: {
         revokedAt: new Date()
       }
@@ -728,7 +815,7 @@ app.post(
       ip: req.ip
     });
 
-    res.status(204).end();
+    return res.status(204).end();
   }
 );
 
@@ -740,18 +827,15 @@ app.delete(
   '/api/documents/:id',
   requireAuth,
   async (req: AuthRequest, res) => {
-    const documentId = String(
-      req.params.id
+    const documentId = String(req.params.id);
+
+    const document = await getAuthorizedDocument(
+      req.user!.id,
+      documentId,
+      'DELETE'
     );
 
-    const d =
-      await getAuthorizedDocument(
-        req.user!.id,
-        documentId,
-        'DELETE'
-      );
-
-    if (!d) {
+    if (!document) {
       await audit('ACCESS_DENIED', {
         userId: req.user!.id,
         documentId,
@@ -764,32 +848,27 @@ app.delete(
       });
     }
 
-    await prisma.$transaction(
-      async tx => {
-        await tx.auditLog.create({
-          data: {
-            userId: req.user!.id,
-            action: 'DELETE',
-            success: true,
-            ip: req.ip,
-            details:
-              `document ${d.id} deleted`
-          }
-        });
+    await prisma.$transaction(async tx => {
+      await tx.auditLog.create({
+        data: {
+          userId: req.user!.id,
+          action: 'DELETE',
+          success: true,
+          ip: req.ip,
+          details: `document ${document.id} deleted`
+        }
+      });
 
-        await tx.document.delete({
-          where: {
-            id: documentId
-          }
-        });
-      }
-    );
+      await tx.document.delete({
+        where: {
+          id: documentId
+        }
+      });
+    });
 
-    await removeFile(
-      d.storageName
-    );
+    await removeFile(document.storageName);
 
-    res.status(204).end();
+    return res.status(204).end();
   }
 );
 
@@ -800,24 +879,19 @@ app.delete(
 app.use(
   (
     err: any,
-    _req: any,
-    res: any,
-    _next: any
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction
   ) => {
-    console.error(
-      'request error',
-      err?.message
-    );
+    console.error('Request error:', err?.message);
 
-    if (
-      err instanceof multer.MulterError
-    ) {
+    if (err instanceof multer.MulterError) {
       return res.status(400).json({
         error: 'Upload rejected'
       });
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Internal server error'
     });
   }
