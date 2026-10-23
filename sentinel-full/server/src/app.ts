@@ -230,7 +230,6 @@ res.clearCookie('sentinel_session', {
   path: '/'
 });
 
-
     await audit('LOGOUT', {
       userId: req.user!.id,
       success: true,
