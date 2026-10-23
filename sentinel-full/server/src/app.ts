@@ -1,4 +1,3 @@
-
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -84,13 +83,13 @@ app.post(
       .object({
         name: z.string().trim().min(2).max(100),
         email: z.string().email(),
-        password: z.string().min(12).max(128)
+        password: z.string().min(6).max(128)
       })
       .safeParse(req.body);
 
     if (!p.success) {
       return res.status(400).json({
-        error: 'Invalid input'
+        error: 'Enter valid details. Password must contain between 6 and 128 characters.'
       });
     }
 
@@ -134,7 +133,7 @@ app.post(
     const p = z
       .object({
         email: z.string().email(),
-        password: z.string().min(1)
+        password: z.string().min(1).max(128)
       })
       .safeParse(req.body);
 
@@ -281,7 +280,7 @@ app.post(
     const p = z
       .object({
         currentPassword: z.string().min(1).max(128),
-        newPassword: z.string().min(12).max(128),
+        newPassword: z.string().min(6).max(128),
         confirmPassword: z.string().min(1).max(128)
       })
       .safeParse(req.body);
@@ -289,7 +288,7 @@ app.post(
     if (!p.success) {
       return res.status(400).json({
         error:
-          'Enter a valid current password and a new password between 12 and 128 characters.'
+          'Enter your current password and a new password between 6 and 128 characters.'
       });
     }
 
@@ -301,7 +300,7 @@ app.post(
 
     if (p.data.currentPassword === p.data.newPassword) {
       return res.status(400).json({
-        error: 'Your new password must be different.'
+        error: 'Your new password must be different from your current password.'
       });
     }
 
@@ -318,7 +317,6 @@ app.post(
         p.data.currentPassword
       ))
     ) {
-      // Use an audit action already supported by the project.
       await audit('LOGIN_FAILED', {
         userId: req.user!.id,
         success: false,
@@ -331,10 +329,12 @@ app.post(
       });
     }
 
+    // Hash the new password before saving it.
     const passwordHash = await argon2.hash(
       p.data.newPassword
     );
 
+    // Save the new password and invalidate existing sessions.
     await prisma.$transaction([
       prisma.user.update({
         where: {
