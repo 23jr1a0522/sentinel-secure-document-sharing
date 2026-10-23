@@ -968,7 +968,15 @@ function DocumentsPage({
                 <div className="document-actions">
                   <button className="action-button secondary" onClick={() => viewDocument(doc)}>View</button>
                   <button className="action-button primary" onClick={() => downloadDocument(doc)}>↓</button>
-                  {owner && <button className="action-button share" onClick={() => setShareDoc(doc)}>♧</button>}
+                  {owner && (
+  <button
+    className="action-button share"
+    onClick={() => setShareDoc(doc)}
+    type="button"
+  >
+    Share
+  </button>
+)}
                 </div>
 
                 {owner && doc.shares && doc.shares.length > 0 && (
