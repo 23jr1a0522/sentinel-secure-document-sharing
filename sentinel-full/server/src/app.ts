@@ -32,8 +32,6 @@ import aiRouter from './ai.js';
 
 const app = express();
 
-app.use('/api/ai', aiRouter);
-
 // Render runs the application behind a proxy.
 app.set('trust proxy', 1);
 
@@ -48,6 +46,8 @@ app.use(
 
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
+
+app.use('/api/ai', aiRouter);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -92,7 +92,8 @@ app.post(
 
     if (!p.success) {
       return res.status(400).json({
-        error: 'Enter valid details. Password must contain between 6 and 128 characters.'
+        error:
+          'Enter valid details. Password must contain between 6 and 128 characters.'
       });
     }
 
@@ -303,7 +304,8 @@ app.post(
 
     if (p.data.currentPassword === p.data.newPassword) {
       return res.status(400).json({
-        error: 'Your new password must be different from your current password.'
+        error:
+          'Your new password must be different from your current password.'
       });
     }
 
