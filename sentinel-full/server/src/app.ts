@@ -1,3 +1,4 @@
+import aiRouter from './ai.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -45,6 +46,7 @@ app.use(
 
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
+app.use('/api/ai', sensitiveLimiter, aiRouter);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
